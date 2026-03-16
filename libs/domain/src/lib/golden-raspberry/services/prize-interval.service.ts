@@ -7,11 +7,6 @@ import {
   PrizeIntervalEntryDto,
 } from '../dtos/prize-interval.dto';
 
-type ProducerIntervals = {
-  name: string;
-  intervals: { prev: number; next: number }[];
-};
-
 @Injectable()
 export class PrizeIntervalService {
   constructor(
@@ -23,13 +18,12 @@ export class PrizeIntervalService {
   async getPrizeIntervals(): Promise<PrizeIntervalDto> {
     const winners = await this.loadWinningMoviesWithProducers();
     const producerWins = this.groupWinYearsByProducer(winners);
-    const intervalsByProducer = this.computeConsecutiveIntervalsByProducer(producerWins);
 
-    if (intervalsByProducer.length === 0) {
+    if (producerWins.size === 0) {
       return { min: [], max: [] };
     }
 
-    const { minEntries, maxEntries } = this.collectMinAndMaxIntervalEntries(intervalsByProducer);
+    const { minEntries, maxEntries } = this.findMinAndMaxIntervalEntriesFromProducerWins(producerWins);
     this.sortEntriesByProducerAndPreviousWin(minEntries);
     this.sortEntriesByProducerAndPreviousWin(maxEntries);
 
@@ -58,37 +52,24 @@ export class PrizeIntervalService {
     return producerWins;
   }
 
-  private computeConsecutiveIntervalsByProducer(
+  private findMinAndMaxIntervalEntriesFromProducerWins(
     producerWins: Map<string, number[]>
-  ): ProducerIntervals[] {
-    const result: ProducerIntervals[] = [];
-    for (const [name, years] of producerWins) {
-      const sorted = [...new Set(years)].sort((a, b) => a - b);
-
-      if (sorted.length < 2) continue;
-
-      const intervals: { prev: number; next: number }[] = [];
-      for (let i = 1; i < sorted.length; i++) {
-        intervals.push({ prev: sorted[i - 1], next: sorted[i] });
-      }
-      result.push({ name, intervals });
-    }
-    return result;
-  }
-
-  private collectMinAndMaxIntervalEntries(
-    intervalsByProducer: ProducerIntervals[]
   ): {
     minEntries: PrizeIntervalEntryDto[];
     maxEntries: PrizeIntervalEntryDto[];
   } {
-    let minInterval = 9999;
-    let maxInterval = -1;
+    let minInterval = Infinity;
+    let maxInterval = -Infinity;
     const minEntries: PrizeIntervalEntryDto[] = [];
     const maxEntries: PrizeIntervalEntryDto[] = [];
 
-    for (const { name, intervals } of intervalsByProducer) {
-      for (const { prev, next } of intervals) {
+    for (const [name, years] of producerWins) {
+      const sortedYears = [...new Set(years)].sort((a, b) => a - b);
+      if (sortedYears.length < 2) continue;
+
+      for (let i = 1; i < sortedYears.length; i++) {
+        const prev = sortedYears[i - 1];
+        const next = sortedYears[i];
         const interval = next - prev;
 
         if (interval < minInterval) {
@@ -96,7 +77,12 @@ export class PrizeIntervalService {
           minEntries.length = 0;
         }
         if (interval === minInterval) {
-          minEntries.push({ producer: name, interval, previousWin: prev, followingWin: next });
+          minEntries.push({
+            producer: name,
+            interval,
+            previousWin: prev,
+            followingWin: next,
+          });
         }
 
         if (interval > maxInterval) {
@@ -104,7 +90,12 @@ export class PrizeIntervalService {
           maxEntries.length = 0;
         }
         if (interval === maxInterval) {
-          maxEntries.push({ producer: name, interval, previousWin: prev, followingWin: next });
+          maxEntries.push({
+            producer: name,
+            interval,
+            previousWin: prev,
+            followingWin: next,
+          });
         }
       }
     }
@@ -112,7 +103,9 @@ export class PrizeIntervalService {
     return { minEntries, maxEntries };
   }
 
-  private sortEntriesByProducerAndPreviousWin(entries: PrizeIntervalEntryDto[]): void {
+  private sortEntriesByProducerAndPreviousWin(
+    entries: PrizeIntervalEntryDto[]
+  ): void {
     entries.sort(
       (a, b) => a.producer.localeCompare(b.producer) || a.previousWin - b.previousWin
     );
