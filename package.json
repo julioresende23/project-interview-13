@@ -6,7 +6,7 @@
     "start": "npx nx serve api-golden-raspberry --output-style=stream",
     "build": "nx build api-golden-raspberry",
     "lint": "nx run-many -t lint",
-    "test": "nx run domain:test && nx run api-golden-raspberry-e2e:e2e",
+    "test": "npm run test:integration",
     "test:integration": "nx run api-golden-raspberry-e2e:e2e"
   },
   "private": true,
